@@ -1,6 +1,7 @@
 import io
 import math
 import os
+import zipfile
 from datetime import datetime
 from decimal import Decimal
 import pandas as pd
@@ -269,14 +270,29 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 
 def gerar_shippers_gerais(df_raw, dados_embarque, cia, data_str):
     """
-    Função para processar e gerar os Shippers com base nos dados únicos informados.
-    Pode retornar um PDF unificado, ZIP com documentos, etc.
+    Gera um arquivo .ZIP válido na memória contendo os documentos dos Shippers.
     """
-    # Exemplo simples de buffer para integrar a lógica do seu código de Shippers
-    buffer_shippers = io.BytesIO()
-    buffer_shippers.write(b"SHIPPERS GERADOS COM SUCESSO")
-    buffer_shippers.seek(0)
-    return buffer_shippers.getvalue()
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for sigla, info in dados_embarque.items():
+            if info["sacas"] != "":
+                conteudo_shipper = f"SHIPPER / ETIQUETA DE EMBARQUE\n" \
+                                   f"==============================\n" \
+                                   f"Companhia: {cia.upper()}\n" \
+                                   f"Destino: {sigla}\n" \
+                                   f"Sacas: {info['sacas']}\n" \
+                                   f"Peso Total: {info['peso']}\n" \
+                                   f"Data: {data_str}\n"
+                
+                nome_arquivo_no_zip = f"Shipper_{sigla}_{cia}.txt"
+                zip_file.writestr(nome_arquivo_no_zip, conteudo_shipper)
+                
+        resumo_texto = f"Resumo Geral de Embarque - {cia.upper()} - Data: {data_str}\n"
+        zip_file.writestr("Resumo_Geral_Embarque.txt", resumo_texto)
+
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
 
 # =========================================================
@@ -335,7 +351,6 @@ if file_excel and todas_preenchidas:
             df_raw = pd.read_excel(file_excel, header=None, engine="openpyxl")
             dados_embarque = {}
 
-            # Processa o cálculo para cada sigla
             for sigla in TODAS_SIGLAS:
                 if sigla in sacas_manuais and sacas_manuais[sigla] is not None:
                     qnt_sacas = sacas_manuais[sigla]
@@ -381,7 +396,7 @@ if file_excel and todas_preenchidas:
 
             st.success("✅ **Todos os documentos foram gerados com sucesso!** Escolha abaixo os arquivos para baixar:")
 
-            # Área de Downloads Dividida em Blocos
+            # Área de Downloads Disponíveis
             st.markdown("### 📥 Downloads Disponíveis")
             col_down1, col_down2 = st.columns(2)
 
@@ -405,7 +420,7 @@ if file_excel and todas_preenchidas:
             with col_down2:
                 st.markdown("#### 📦 Documentos de Shippers")
                 st.download_button(
-                    label="BAIXAR SHIPPERS GERADOS",
+                    label="BAIXAR SHIPPERS GERADOS (ZIP)",
                     data=shippers_bytes,
                     file_name=f"Shippers_{cia_input}_{data_file}.zip",
                     mime="application/zip",
