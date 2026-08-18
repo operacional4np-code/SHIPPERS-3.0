@@ -135,12 +135,16 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original):
     total_overpack = perfeito_j * i_fib
     peso_total_destino = float(total_overpack * f_sacas)
 
+    # Captura da data atual com Fuso Horário de Brasília
+    fuso_bsb = pytz.timezone("America/Sao_Paulo")
+    data_formatada = datetime.now(fuso_bsb).strftime("%d/%m/%Y")
+
     contexto = {
         "FIBREBOARD": str(int(i_fib)),
         "PESO_G": "{:.2f}".format(perfeito_j).replace(".", ","),
         "TOTAL_OVERPACK": "{:.2f}".format(total_overpack).replace(".", ","),
         "MARCACAO": " ".join([f"#{i+1}" for i in range(int(sacas_qtd))]),
-        "DATA": date.today().strftime("%d/%m/%Y"),
+        "DATA": data_formatada,
         "QTD_OVERPACK": int(sacas_qtd),
     }
 
@@ -218,8 +222,8 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
     cia_text_w = c.stringWidth(cia.upper(), "Helvetica-Bold", 18)
     c.line((width - cia_text_w) / 2.0, height - 108, (width + cia_text_w) / 2.0, height - 108)
 
-    y_start = height - 150
-    row_height = 28
+    y_start = height - 145
+    row_height = 25
     box_width = 50
 
     x_sigla = 70
@@ -242,34 +246,49 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
         peso_total = f"{info['peso']:.2f}".replace(".", ",") if isinstance(info["peso"], (int, float)) else ""
 
         c.setFont("Helvetica-Bold", 11)
-        c.drawString(x_sigla, y_curr + 6, sigla)
+        c.drawString(x_sigla, y_curr + 4, sigla)
 
         c.setLineWidth(1.2)
         c.rect(x_box1, y_curr, box_width, row_height - 6)
         if qnt_sacas:
             c.setFont("Helvetica", 10)
-            c.drawCentredString(x_box1 + (box_width / 2), y_curr + 6, qnt_sacas)
+            c.drawCentredString(x_box1 + (box_width / 2), y_curr + 4, qnt_sacas)
         c.setFont("Helvetica", 10)
-        c.drawString(x_lbl1, y_curr + 6, "SACAS")
-        c.drawString(x_times1, y_curr + 6, "X")
+        c.drawString(x_lbl1, y_curr + 4, "SACAS")
+        c.drawString(x_times1, y_curr + 4, "X")
 
         c.rect(x_box2, y_curr, box_width, row_height - 6)
-        c.drawString(x_lbl2, y_curr + 6, "PALETES")
-        c.drawString(x_times2, y_curr + 6, "X")
+        c.drawString(x_lbl2, y_curr + 4, "PALETES")
+        c.drawString(x_times2, y_curr + 4, "X")
 
         c.rect(x_box3, y_curr, box_width, row_height - 6)
         if peso_total:
             c.setFont("Helvetica", 9)
-            c.drawCentredString(x_box3 + (box_width / 2), y_curr + 6, peso_total)
+            c.drawCentredString(x_box3 + (box_width / 2), y_curr + 4, peso_total)
         c.setFont("Helvetica", 10)
-        c.drawString(x_lbl3, y_curr + 6, "PESO")
+        c.drawString(x_lbl3, y_curr + 4, "PESO")
 
         y_curr -= row_height
 
-    y_footer = y_curr - 30
+    # Rodapé: Caminhão e Condutor
+    y_footer = y_curr - 15
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(x_sigla + 30, y_footer, f"CAMINHÃO {caminhao_str.upper()}")
-    c.drawString(x_sigla + 30, y_footer - 20, f"CONDUTOR: {condutor_str.upper()}")
+    c.drawString(x_sigla + 30, y_footer, f"CAMINHÃO:  {caminhao_str.upper()}")
+    c.drawString(x_sigla + 30, y_footer - 18, f"CONDUTOR:  {condutor_str.upper()}")
+
+    # Seção: OBSERVAÇÕES
+    y_obs = y_footer - 45
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(x_sigla - 30, y_obs, "OBSERVAÇÕES:")
+
+    c.setLineWidth(1)
+    x_linha_inicio = x_sigla + 60
+    x_linha_fim = width - 40
+
+    # 3 linhas de observação
+    c.line(x_linha_inicio, y_obs, x_linha_fim, y_obs)
+    c.line(x_linha_inicio, y_obs - 25, x_linha_fim, y_obs - 25)
+    c.line(x_linha_inicio, y_obs - 50, x_linha_fim, y_obs - 50)
 
     c.showPage()
     c.save()
@@ -366,10 +385,10 @@ if file_excel and todas_sacas:
                         dados_embarque[sigla] = {"sacas": sacas_manuais[sigla], "peso": ""}
                         erros.append(f"{sigla} (Dados não encontrados na planilha)")
 
-            # Datas formatadas para exibição e salvamento
-            fuso_sp = pytz.timezone("America/Sao_Paulo")
-            data_hoje = datetime.now(fuso_sp).strftime("%d/%m/%Y")
-            data_file = datetime.now(fuso_sp).strftime("%Y%m%d")
+            # Datas formatadas pelo fuso de Brasília
+            fuso_bsb = pytz.timezone("America/Sao_Paulo")
+            data_hoje = datetime.now(fuso_bsb).strftime("%d/%m/%Y")
+            data_file = datetime.now(fuso_bsb).strftime("%Y%m%d")
 
             # Gerar PDFs e Excels do Controle de Embarque
             pdf_emb_bytes = gerar_pdf_controle_embarque(
