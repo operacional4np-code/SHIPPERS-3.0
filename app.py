@@ -163,11 +163,13 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
 
+    # Data no cabeçalho
     ws.cell(row=2, column=9, value=data_str)
     ws.cell(row=5, column=5, value=cia.upper())
 
+    # Preenchimento das linhas das siglas
     linhas_processadas = set()
-    for row in range(7, 20):
+    for row in range(7, 17):
         val_sigla = str(ws.cell(row=row, column=1).value or "").strip().upper()
         if val_sigla in dados_linhas and val_sigla not in linhas_processadas:
             linhas_processadas.add(val_sigla)
@@ -181,8 +183,9 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
             else:
                 ws.cell(row=row, column=8, value="")
 
-    ws.cell(row=19, column=3, value=caminhao_str.upper())
-    ws.cell(row=20, column=3, value=condutor_str.upper())
+    # Preenchimento correto do Caminhão (linha 18) e Condutor (linha 19) na Coluna C
+    ws.cell(row=18, column=3, value=caminhao_str.upper())
+    ws.cell(row=19, column=3, value=condutor_str.upper())
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -285,7 +288,6 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
     x_linha_inicio = x_sigla + 60
     x_linha_fim = width - 40
 
-    # 3 linhas de observação
     c.line(x_linha_inicio, y_obs, x_linha_fim, y_obs)
     c.line(x_linha_inicio, y_obs - 25, x_linha_fim, y_obs - 25)
     c.line(x_linha_inicio, y_obs - 50, x_linha_fim, y_obs - 50)
@@ -365,7 +367,6 @@ if file_excel and todas_sacas:
                         peso_total, contexto = calcular_valores_shipper(qnt_sacas, q_volumes, p_original)
                         dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_total}
 
-                        # Renderizando a Shipper no Word com docxtpl
                         sigla_arq = sigla.replace(" ", "_")
                         template_path = f"templates/{sigla_arq}-SHIPPER-t.docx"
 
@@ -385,12 +386,10 @@ if file_excel and todas_sacas:
                         dados_embarque[sigla] = {"sacas": sacas_manuais[sigla], "peso": ""}
                         erros.append(f"{sigla} (Dados não encontrados na planilha)")
 
-            # Datas formatadas pelo fuso de Brasília
             fuso_bsb = pytz.timezone("America/Sao_Paulo")
             data_hoje = datetime.now(fuso_bsb).strftime("%d/%m/%Y")
             data_file = datetime.now(fuso_bsb).strftime("%Y%m%d")
 
-            # Gerar PDFs e Excels do Controle de Embarque
             pdf_emb_bytes = gerar_pdf_controle_embarque(
                 cia=cia_input,
                 data_str=data_hoje,
@@ -413,7 +412,6 @@ if file_excel and todas_sacas:
                 for err in erros:
                     st.warning(f"⚠️ {err}")
 
-            # Exibição dos Botões de Download
             st.markdown("### 📥 Arquivos Gerados para Download")
             col_down1, col_down2 = st.columns(2)
 
