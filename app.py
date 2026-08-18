@@ -2,26 +2,29 @@ import io
 import math
 import os
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 import pandas as pd
 import pytz
 import openpyxl
 import streamlit as st
 
-# ReportLab para geração de PDF e tratamento de imagens
+# Preenchimento de templates Word (.docx)
+from docxtpl import DocxTemplate
+
+# ReportLab para geração do Controle de Embarque em PDF
 from reportlab.lib.pagesizes import A4, portrait
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# Configuração Inicial da Página
+# Configuração da Página no Streamlit
 st.set_page_config(
-    page_title="Sistema Unificado de Embarque - New Post",
+    page_title="Gerador Unificado New Post - Shippers e Embarque",
     page_icon="📦",
     layout="wide"
 )
 
-# Constantes e Mapeamentos
+# MAPA DE TRADUÇÃO DAS CIDADES / DESTINOS
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE",
     "CGB": "CUIABA",
@@ -32,15 +35,15 @@ MAPA_DESTINOS = {
     "POA": "PORTO ALEGRE",
     "PVH": "PORTO VELHO",
     "POA PRIME": "PRIME-RS PORTO ALEGRE",
-    "FLN PRIME": "PRIME-SC FLORIANÓPOLIS",
+    "FLN PRIME": "PRIME-SC FLORIANÓPOLIS"
 }
 
-TODAS_SIGLAS = [
+TODAS_SIGLAS_PADRAO = [
     "CGR", "CGB", "CWB", "FLN", "GYN", "MAO", "POA", "PVH", "POA PRIME", "FLN PRIME"
 ]
 
 # ---------------------------------------------------------
-# FUNÇÕES DE APOIO - CÁLCULOS E EXTRATOR
+# FUNÇÕES DE EXTRAÇÃO E CÁLCULO
 # ---------------------------------------------------------
 def extrair_dados_coleta(df_raw, termo_busca):
     linha_cabecalho = None
@@ -61,7 +64,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
             break
 
     if linha_cabecalho is None:
-        return None, None
+        return None, None, None
 
     for idx in range(linha_cabecalho + 1, len(df_raw)):
         row = df_raw.iloc[idx]
@@ -97,19 +100,18 @@ def extrair_dados_coleta(df_raw, termo_busca):
             qtd_volumes = int(float(str(val_q).replace(",", ".").strip()))
             val_p = row.iloc[idx_peso]
             peso_original = float(str(val_p).replace(",", ".").strip())
-            return qtd_volumes, peso_original
+            return termo_busca, qtd_volumes, peso_original
         except Exception:
             continue
-    return None, None
+    return None, None, None
 
 
-def calcular_peso_total(f_sacas, q_volumes, p_original):
-    f_sacas_dec = Decimal(str(f_sacas))
+def calcular_valores_shipper(sacas_qtd, q_volumes, p_original):
+    f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    g_peso_corrigido = (f_sacas_dec * Decimal("3")) + d_peso_original
-
-    fracao_fib = float(q_volumes) / float(f_sacas)
+    g_peso_corrigido = (f_sacas * Decimal("3")) + d_peso_original
+    fracao_fib = float(q_volumes) / float(sacas_qtd)
     i_fib = Decimal(
         str(
             max(
@@ -120,21 +122,34 @@ def calcular_peso_total(f_sacas, q_volumes, p_original):
         )
     )
 
-    base_j = float(g_peso_corrigido / f_sacas_dec / i_fib)
+    base_j = float(g_peso_corrigido / f_sacas / i_fib)
     j_inicio = Decimal(f"{max(0.01, math.floor(base_j * 100) / 100 - 0.50):.2f}")
     perfeito_j = j_inicio
 
     for a in range(1500):
         j_teste = j_inicio + (Decimal(str(a)) * Decimal("0.01"))
-        if (j_teste * i_fib * f_sacas_dec) - g_peso_corrigido >= 0:
+        if (j_teste * i_fib * f_sacas) - g_peso_corrigido >= 0:
             perfeito_j = j_teste
             break
 
     total_overpack = perfeito_j * i_fib
-    peso_total_destino = total_overpack * f_sacas_dec
-    return float(peso_total_destino)
+    peso_total_destino = float(total_overpack * f_sacas)
+
+    contexto = {
+        "FIBREBOARD": str(int(i_fib)),
+        "PESO_G": "{:.2f}".format(perfeito_j).replace(".", ","),
+        "TOTAL_OVERPACK": "{:.2f}".format(total_overpack).replace(".", ","),
+        "MARCACAO": " ".join([f"#{i+1}" for i in range(int(sacas_qtd))]),
+        "DATA": date.today().strftime("%d/%m/%Y"),
+        "QTD_OVERPACK": int(sacas_qtd),
+    }
+
+    return peso_total_destino, contexto
 
 
+# ---------------------------------------------------------
+# GERADORES DE CONTROLE DE EMBARQUE (EXCEL E PDF)
+# ---------------------------------------------------------
 def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condutor_str, template_path="Controle Embarque-t.xlsx"):
     if not os.path.exists(template_path):
         wb = openpyxl.Workbook()
@@ -153,12 +168,10 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
         if val_sigla in dados_linhas and val_sigla not in linhas_processadas:
             linhas_processadas.add(val_sigla)
             info = dados_linhas[val_sigla]
-            
             if info["sacas"] != "":
                 ws.cell(row=row, column=2, value=int(info["sacas"]))
             else:
                 ws.cell(row=row, column=2, value="")
-                
             if isinstance(info["peso"], (int, float)):
                 ws.cell(row=row, column=8, value=round(info["peso"], 2))
             else:
@@ -179,16 +192,12 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
     width, height = A4
 
     possiveis_nomes = ["logo.png.JPG", "logo.png.jpg", "logo.png", "logo.jpg"]
-    path_logo = None
-    for nome in possiveis_nomes:
-        if os.path.exists(nome):
-            path_logo = nome
-            break
+    path_logo = next((nome for nome in possiveis_nomes if os.path.exists(nome)), None)
 
     if path_logo:
         try:
             img = ImageReader(path_logo)
-            c.drawImage(img, 40, height - 75, width=120, height=50, preserveAspectRatio=True, mask='auto')
+            c.drawImage(img, 40, height - 75, width=120, height=50, preserveAspectRatio=True, mask="auto")
         except Exception:
             pass
 
@@ -227,10 +236,10 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 
     y_curr = y_start
 
-    for sigla in TODAS_SIGLAS:
+    for sigla in TODAS_SIGLAS_PADRAO:
         info = dados_linhas.get(sigla, {"sacas": "", "peso": ""})
         qnt_sacas = str(info["sacas"]) if info["sacas"] != "" else ""
-        peso_total = f"{info['peso']:.2f}".replace('.', ',') if isinstance(info["peso"], (int, float)) else ""
+        peso_total = f"{info['peso']:.2f}".replace(".", ",") if isinstance(info["peso"], (int, float)) else ""
 
         c.setFont("Helvetica-Bold", 11)
         c.drawString(x_sigla, y_curr + 6, sigla)
@@ -268,41 +277,14 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
     return buffer.getvalue()
 
 
-def gerar_shippers_gerais(df_raw, dados_embarque, cia, data_str):
-    """
-    Gera um arquivo .ZIP válido na memória contendo os documentos dos Shippers.
-    """
-    zip_buffer = io.BytesIO()
-    
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for sigla, info in dados_embarque.items():
-            if info["sacas"] != "":
-                conteudo_shipper = f"SHIPPER / ETIQUETA DE EMBARQUE\n" \
-                                   f"==============================\n" \
-                                   f"Companhia: {cia.upper()}\n" \
-                                   f"Destino: {sigla}\n" \
-                                   f"Sacas: {info['sacas']}\n" \
-                                   f"Peso Total: {info['peso']}\n" \
-                                   f"Data: {data_str}\n"
-                
-                nome_arquivo_no_zip = f"Shipper_{sigla}_{cia}.txt"
-                zip_file.writestr(nome_arquivo_no_zip, conteudo_shipper)
-                
-        resumo_texto = f"Resumo Geral de Embarque - {cia.upper()} - Data: {data_str}\n"
-        zip_file.writestr("Resumo_Geral_Embarque.txt", resumo_texto)
+# ---------------------------------------------------------
+# INTERFACE STREAMLIT
+# ---------------------------------------------------------
+st.title("📦 Sistema Unificado New Post: Shippers & Controle de Embarque")
+st.markdown("Preencha os dados abaixo para gerar os **Shippers (.docx)** nos modelos e o **Controle de Embarque (PDF/Excel)**.")
 
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
-
-
-# =========================================================
-# INTERFACE PRINCIPAL - ENTRADA ÚNICA DE DADOS
-# =========================================================
-st.title("🚚 Gerador Unificado: Shippers & Controle de Embarque")
-st.markdown("Preencha os dados abaixo apenas **uma vez** para gerar **ambos os documentos simultaneamente**.")
-
-# 1. Informações Gerais do Embarque
-st.subheader("1. Informações do Embarque")
+# 1. Informações Gerais
+st.subheader("1. Informações Gerais do Embarque")
 col1, col2, col3 = st.columns(3)
 with col1:
     cia_input = st.text_input("Companhia / Título Central:", value="LATAM")
@@ -311,65 +293,85 @@ with col2:
 with col3:
     condutor_input = st.text_input("Nome do Condutor:", value="ANTONIO")
 
-# 2. Siglas e Sacas
+# 2. Seleção de Siglas e Entrada de Sacas
 st.markdown("---")
 st.subheader("2. Destinos e Quantidade de Sacas")
-
 siglas_input = st.text_input(
-    "Siglas do embarque (separadas por vírgula):",
+    "Digite as Siglas do embarque (separadas por vírgula):",
     value="CGR, CGB, CWB, FLN, GYN, MAO, POA, PVH, POA PRIME, FLN PRIME",
 ).upper().strip()
 
-lista_siglas_usuario = [s.strip() for s in siglas_input.split(",") if s.strip()]
+lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
 
 sacas_manuais = {}
-if lista_siglas_usuario:
-    cols = st.columns(min(len(lista_siglas_usuario), 5))
-    for idx, sigla in enumerate(lista_siglas_usuario):
+if lista_siglas:
+    st.markdown("##### Informe a quantidade de sacas por destino:")
+    cols = st.columns(min(len(lista_siglas), 5))
+    for idx, sigla in enumerate(lista_siglas):
         with cols[idx % 5]:
             sacas_manuais[sigla] = st.number_input(
-                f"Sacas {sigla}:",
+                f"Sacas para {sigla}:",
                 min_value=1,
                 value=None,
                 step=1,
-                key=f"sacas_{sigla}",
+                key=f"s_{sigla}",
             )
 
-# 3. Planilha de Coleta
+# 3. Upload da Planilha
 st.markdown("---")
 st.subheader("3. Carregue a Planilha de Coleta")
-file_excel = st.file_uploader("Envie a planilha de coleta (.xlsx / .xlsm):", type=["xlsx", "xlsm"])
+file_excel = st.file_uploader("Selecione o arquivo de coleta (.xlsx / .xlsm):", type=["xlsx", "xlsm"])
 
-todas_preenchidas = len(sacas_manuais) > 0 and all(v is not None for v in sacas_manuais.values())
+todas_sacas = len(sacas_manuais) > 0 and all(s is not None for s in sacas_manuais.values())
 
-# 4. Processamento Simultâneo
+# 4. Geração Unificada
 st.markdown("---")
 
-if file_excel and todas_preenchidas:
-    if st.button("🚀 GERAR TUDO SIMULTANEAMENTE", use_container_width=True):
+if file_excel and todas_sacas:
+    if st.button("🚀 GERAR SHIPPERS E CONTROLE DE EMBARQUE", use_container_width=True):
         try:
             df_raw = pd.read_excel(file_excel, header=None, engine="openpyxl")
+            
+            zip_shippers_buffer = io.BytesIO()
             dados_embarque = {}
+            emitidos, erros = [], []
 
-            for sigla in TODAS_SIGLAS:
-                if sigla in sacas_manuais and sacas_manuais[sigla] is not None:
-                    qnt_sacas = sacas_manuais[sigla]
+            with zipfile.ZipFile(zip_shippers_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for sigla in lista_siglas:
                     cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                    q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
+                    _, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                     if p_original and q_volumes:
-                        peso_calc = calcular_peso_total(qnt_sacas, q_volumes, p_original)
-                        dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_calc}
-                    else:
-                        dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": ""}
-                else:
-                    dados_embarque[sigla] = {"sacas": "", "peso": ""}
+                        qnt_sacas = sacas_manuais[sigla]
+                        peso_total, contexto = calcular_valores_shipper(qnt_sacas, q_volumes, p_original)
+                        dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_total}
 
+                        # Renderizando a Shipper no Word com docxtpl
+                        sigla_arq = sigla.replace(" ", "_")
+                        template_path = f"templates/{sigla_arq}-SHIPPER-t.docx"
+
+                        if os.path.exists(template_path):
+                            try:
+                                doc = DocxTemplate(template_path)
+                                doc.render(contexto)
+                                doc_io = io.BytesIO()
+                                doc.save(doc_io)
+                                zip_file.writestr(f"Shipper_{sigla_arq}.docx", doc_io.getvalue())
+                                emitidos.append(sigla)
+                            except Exception as e_tpl:
+                                erros.append(f"{sigla} (Erro ao renderizar template: {e_tpl})")
+                        else:
+                            erros.append(f"{sigla} (Template '{template_path}' não encontrado)")
+                    else:
+                        dados_embarque[sigla] = {"sacas": sacas_manuais[sigla], "peso": ""}
+                        erros.append(f"{sigla} (Dados não encontrados na planilha)")
+
+            # Datas formatadas para exibição e salvamento
             fuso_sp = pytz.timezone("America/Sao_Paulo")
             data_hoje = datetime.now(fuso_sp).strftime("%d/%m/%Y")
             data_file = datetime.now(fuso_sp).strftime("%Y%m%d")
 
-            # Gerar PDF e Excel do Controle de Embarque
+            # Gerar PDFs e Excels do Controle de Embarque
             pdf_emb_bytes = gerar_pdf_controle_embarque(
                 cia=cia_input,
                 data_str=data_hoje,
@@ -386,22 +388,18 @@ if file_excel and todas_preenchidas:
                 condutor_str=condutor_input
             )
 
-            # Gerar os Shippers
-            shippers_bytes = gerar_shippers_gerais(
-                df_raw=df_raw,
-                dados_embarque=dados_embarque,
-                cia=cia_input,
-                data_str=data_hoje
-            )
+            st.success("✅ **Processamento concluído!**")
 
-            st.success("✅ **Todos os documentos foram gerados com sucesso!** Escolha abaixo os arquivos para baixar:")
+            if erros:
+                for err in erros:
+                    st.warning(f"⚠️ {err}")
 
-            # Área de Downloads Disponíveis
-            st.markdown("### 📥 Downloads Disponíveis")
+            # Exibição dos Botões de Download
+            st.markdown("### 📥 Arquivos Gerados para Download")
             col_down1, col_down2 = st.columns(2)
 
             with col_down1:
-                st.markdown("#### 📄 Documentos de Controle de Embarque")
+                st.markdown("#### 📄 Controle de Embarque")
                 st.download_button(
                     label="BAIXAR CONTROLE DE EMBARQUE (PDF)",
                     data=pdf_emb_bytes,
@@ -418,14 +416,18 @@ if file_excel and todas_preenchidas:
                 )
 
             with col_down2:
-                st.markdown("#### 📦 Documentos de Shippers")
-                st.download_button(
-                    label="BAIXAR SHIPPERS GERADOS (ZIP)",
-                    data=shippers_bytes,
-                    file_name=f"Shippers_{cia_input}_{data_file}.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
+                st.markdown("#### 📦 Shippers Preenchidas (.docx)")
+                if emitidos:
+                    zip_shippers_buffer.seek(0)
+                    st.download_button(
+                        label="BAIXAR SHIPPERS PREENCHIDAS (ZIP)",
+                        data=zip_shippers_buffer.getvalue(),
+                        file_name=f"Shippers_{cia_input}_{data_file}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Nenhuma Shipper pôde ser gerada devido a erros de busca ou ausência de templates.")
 
         except Exception as e:
-            st.error(f"Ocorreu um erro ao processar o arquivo: {e}")
+            st.error(f"Ocorreu um erro geral no processamento: {e}")
