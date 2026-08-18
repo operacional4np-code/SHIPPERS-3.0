@@ -20,7 +20,7 @@ from reportlab.lib.utils import ImageReader
 # Configuração da Página no Streamlit
 st.set_page_config(
     page_title="Shippers e controle de embarque",
-    page_icon="📦",
+    page_icon="🚚",
     layout="wide"
 )
 
@@ -301,7 +301,7 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 # ---------------------------------------------------------
 # INTERFACE STREAMLIT
 # ---------------------------------------------------------
-st.title("📦 Shippers & Controle de Embarque")
+st.title("🚚 Shippers & Controle de Embarque")
 st.markdown("Preencha os dados abaixo para gerar os **Shippers (.docx)** nos modelos e o **Controle de Embarque (PDF/Excel)**.")
 
 # 1. Informações Gerais
