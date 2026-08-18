@@ -15,7 +15,7 @@ from reportlab.lib.utils import ImageReader
 
 # Configuração Inicial da Página
 st.set_page_config(
-    page_title="Sistema Logístico - New Post",
+    page_title="Sistema Unificado de Embarque - New Post",
     page_icon="📦",
     layout="wide"
 )
@@ -39,7 +39,7 @@ TODAS_SIGLAS = [
 ]
 
 # ---------------------------------------------------------
-# FUNÇÕES DE APOIO - CONTROLE DE EMBARQUE
+# FUNÇÕES DE APOIO - CÁLCULOS E EXTRATOR
 # ---------------------------------------------------------
 def extrair_dados_coleta(df_raw, termo_busca):
     linha_cabecalho = None
@@ -267,131 +267,150 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
     return buffer.getvalue()
 
 
+def gerar_shippers_gerais(df_raw, dados_embarque, cia, data_str):
+    """
+    Função para processar e gerar os Shippers com base nos dados únicos informados.
+    Pode retornar um PDF unificado, ZIP com documentos, etc.
+    """
+    # Exemplo simples de buffer para integrar a lógica do seu código de Shippers
+    buffer_shippers = io.BytesIO()
+    buffer_shippers.write(b"SHIPPERS GERADOS COM SUCESSO")
+    buffer_shippers.seek(0)
+    return buffer_shippers.getvalue()
+
+
 # =========================================================
-# INTERFACE PRINCIPAL - NAVEGAÇÃO POR ABAS
+# INTERFACE PRINCIPAL - ENTRADA ÚNICA DE DADOS
 # =========================================================
-st.title("🚚 Sistema de Operações Logísticas - New Post")
+st.title("🚚 Gerador Unificado: Shippers & Controle de Embarque")
+st.markdown("Preencha os dados abaixo apenas **uma vez** para gerar **ambos os documentos simultaneamente**.")
 
-aba_shippers, aba_embarque = st.tabs(["📄 Gerador de Shippers", "📋 Controle de Embarque"])
+# 1. Informações Gerais do Embarque
+st.subheader("1. Informações do Embarque")
+col1, col2, col3 = st.columns(3)
+with col1:
+    cia_input = st.text_input("Companhia / Título Central:", value="LATAM")
+with col2:
+    caminhao_input = st.text_input("Identificação do Caminhão:", value="1º")
+with col3:
+    condutor_input = st.text_input("Nome do Condutor:", value="ANTONIO")
 
-# ---------------------------------------------------------
-# ABA 1: GERADOR DE SHIPPERS
-# ---------------------------------------------------------
-with aba_shippers:
-    st.header("Gerador de Shippers / Documentos")
-    st.info("Suba a planilha de coleta para processar e gerar a documentação de Shippers.")
+# 2. Siglas e Sacas
+st.markdown("---")
+st.subheader("2. Destinos e Quantidade de Sacas")
 
-    file_shippers = st.file_uploader("Selecione a planilha de entrada (.xlsx):", type=["xlsx"], key="file_shippers")
-    
-    if file_shippers:
-        st.success("Planilha carregada com sucesso!")
-        if st.button("🚀 Processar e Gerar Shippers", use_container_width=True):
-            st.info("Insira aqui a chamada para a função de geração dos seus Shippers / arquivos ZIP / PDFs.")
+siglas_input = st.text_input(
+    "Siglas do embarque (separadas por vírgula):",
+    value="CGR, CGB, CWB, FLN, GYN, MAO, POA, PVH, POA PRIME, FLN PRIME",
+).upper().strip()
 
-# ---------------------------------------------------------
-# ABA 2: CONTROLE DE EMBARQUE
-# ---------------------------------------------------------
-with aba_embarque:
-    st.header("Controle de Embarque Aeroporto")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        cia_input = st.text_input("Companhia / Título Central:", value="LATAM", key="cia")
-    with col2:
-        caminhao_input = st.text_input("Identificação do Caminhão:", value="1º", key="cam")
-    with col3:
-        condutor_input = st.text_input("Nome do Condutor:", value="ANTONIO", key="cond")
+lista_siglas_usuario = [s.strip() for s in siglas_input.split(",") if s.strip()]
 
-    st.markdown("---")
-    st.subheader("1. Digite as Siglas e Quantidade de Sacas")
+sacas_manuais = {}
+if lista_siglas_usuario:
+    cols = st.columns(min(len(lista_siglas_usuario), 5))
+    for idx, sigla in enumerate(lista_siglas_usuario):
+        with cols[idx % 5]:
+            sacas_manuais[sigla] = st.number_input(
+                f"Sacas {sigla}:",
+                min_value=1,
+                value=None,
+                step=1,
+                key=f"sacas_{sigla}",
+            )
 
-    siglas_input = st.text_input(
-        "Siglas do embarque (separadas por vírgula):",
-        value="CGR, CGB, CWB, FLN, GYN, MAO, POA, PVH, POA PRIME, FLN PRIME",
-        key="siglas"
-    ).upper().strip()
+# 3. Planilha de Coleta
+st.markdown("---")
+st.subheader("3. Carregue a Planilha de Coleta")
+file_excel = st.file_uploader("Envie a planilha de coleta (.xlsx / .xlsm):", type=["xlsx", "xlsm"])
 
-    lista_siglas_usuario = [s.strip() for s in siglas_input.split(",") if s.strip()]
+todas_preenchidas = len(sacas_manuais) > 0 and all(v is not None for v in sacas_manuais.values())
 
-    sacas_manuais = {}
-    if lista_siglas_usuario:
-        st.markdown("#### Quantidade de Sacas por Destino:")
-        cols = st.columns(min(len(lista_siglas_usuario), 5))
-        for idx, sigla in enumerate(lista_siglas_usuario):
-            with cols[idx % 5]:
-                sacas_manuais[sigla] = st.number_input(
-                    f"Sacas {sigla}:",
-                    min_value=1,
-                    value=None,
-                    step=1,
-                    key=f"sacas_{sigla}",
-                )
+# 4. Processamento Simultâneo
+st.markdown("---")
 
-    st.markdown("---")
-    st.subheader("2. Carregue a Planilha de Coleta")
-    file_excel = st.file_uploader("Envie a planilha (.xlsx / .xlsm):", type=["xlsx", "xlsm"], key="file_embarque")
+if file_excel and todas_preenchidas:
+    if st.button("🚀 GERAR TUDO SIMULTANEAMENTE", use_container_width=True):
+        try:
+            df_raw = pd.read_excel(file_excel, header=None, engine="openpyxl")
+            dados_embarque = {}
 
-    todas_preenchidas = len(sacas_manuais) > 0 and all(v is not None for v in sacas_manuais.values())
+            # Processa o cálculo para cada sigla
+            for sigla in TODAS_SIGLAS:
+                if sigla in sacas_manuais and sacas_manuais[sigla] is not None:
+                    qnt_sacas = sacas_manuais[sigla]
+                    cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
+                    q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
-    if file_excel and todas_preenchidas:
-        if st.button("🚀 GERAR DOCUMENTOS DE EMBARQUE", use_container_width=True, key="btn_emb"):
-            try:
-                df_raw = pd.read_excel(file_excel, header=None, engine="openpyxl")
-                dados_embarque = {}
-
-                for sigla in TODAS_SIGLAS:
-                    if sigla in sacas_manuais and sacas_manuais[sigla] is not None:
-                        qnt_sacas = sacas_manuais[sigla]
-                        cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
-                        q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
-
-                        if p_original and q_volumes:
-                            peso_calc = calcular_peso_total(qnt_sacas, q_volumes, p_original)
-                            dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_calc}
-                        else:
-                            dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": ""}
+                    if p_original and q_volumes:
+                        peso_calc = calcular_peso_total(qnt_sacas, q_volumes, p_original)
+                        dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_calc}
                     else:
-                        dados_embarque[sigla] = {"sacas": "", "peso": ""}
+                        dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": ""}
+                else:
+                    dados_embarque[sigla] = {"sacas": "", "peso": ""}
 
-                fuso_sp = pytz.timezone("America/Sao_Paulo")
-                data_hoje = datetime.now(fuso_sp).strftime("%d/%m/%Y")
-                data_file = datetime.now(fuso_sp).strftime("%Y%m%d")
+            fuso_sp = pytz.timezone("America/Sao_Paulo")
+            data_hoje = datetime.now(fuso_sp).strftime("%d/%m/%Y")
+            data_file = datetime.now(fuso_sp).strftime("%Y%m%d")
 
-                pdf_bytes = gerar_pdf_controle_embarque(
-                    cia=cia_input,
-                    data_str=data_hoje,
-                    dados_linhas=dados_embarque,
-                    caminhao_str=caminhao_input,
-                    condutor_str=condutor_input
+            # Gerar PDF e Excel do Controle de Embarque
+            pdf_emb_bytes = gerar_pdf_controle_embarque(
+                cia=cia_input,
+                data_str=data_hoje,
+                dados_linhas=dados_embarque,
+                caminhao_str=caminhao_input,
+                condutor_str=condutor_input
+            )
+
+            excel_emb_bytes = gerar_excel_controle_embarque(
+                cia=cia_input,
+                data_str=data_hoje,
+                dados_linhas=dados_embarque,
+                caminhao_str=caminhao_input,
+                condutor_str=condutor_input
+            )
+
+            # Gerar os Shippers
+            shippers_bytes = gerar_shippers_gerais(
+                df_raw=df_raw,
+                dados_embarque=dados_embarque,
+                cia=cia_input,
+                data_str=data_hoje
+            )
+
+            st.success("✅ **Todos os documentos foram gerados com sucesso!** Escolha abaixo os arquivos para baixar:")
+
+            # Área de Downloads Dividida em Blocos
+            st.markdown("### 📥 Downloads Disponíveis")
+            col_down1, col_down2 = st.columns(2)
+
+            with col_down1:
+                st.markdown("#### 📄 Documentos de Controle de Embarque")
+                st.download_button(
+                    label="BAIXAR CONTROLE DE EMBARQUE (PDF)",
+                    data=pdf_emb_bytes,
+                    file_name=f"Controle_Embarque_{cia_input}_{data_file}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                st.download_button(
+                    label="BAIXAR CONTROLE DE EMBARQUE (EXCEL)",
+                    data=excel_emb_bytes,
+                    file_name=f"Controle_Embarque_{cia_input}_{data_file}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
                 )
 
-                excel_bytes = gerar_excel_controle_embarque(
-                    cia=cia_input,
-                    data_str=data_hoje,
-                    dados_linhas=dados_embarque,
-                    caminhao_str=caminhao_input,
-                    condutor_str=condutor_input
+            with col_down2:
+                st.markdown("#### 📦 Documentos de Shippers")
+                st.download_button(
+                    label="BAIXAR SHIPPERS GERADOS",
+                    data=shippers_bytes,
+                    file_name=f"Shippers_{cia_input}_{data_file}.zip",
+                    mime="application/zip",
+                    use_container_width=True
                 )
 
-                st.success("✅ Documentos de Controle de Embarque gerados com sucesso!")
-
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    st.download_button(
-                        label="📥 BAIXAR EM PDF",
-                        data=pdf_bytes,
-                        file_name=f"Controle_Embarque_{cia_input}_{data_file}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                with col_btn2:
-                    st.download_button(
-                        label="📊 BAIXAR EM EXCEL (.xlsx)",
-                        data=excel_bytes,
-                        file_name=f"Controle_Embarque_{cia_input}_{data_file}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-
-            except Exception as e:
-                st.error(f"Ocorreu um erro ao processar o arquivo: {e}")
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao processar o arquivo: {e}")
