@@ -174,7 +174,7 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
         if val_sigla in dados_linhas and val_sigla not in linhas_processadas:
             linhas_processadas.add(val_sigla)
             info = dados_linhas[val_sigla]
-            if info["sacas"] != "":
+            if info["sacas"] not in ["", None]:
                 ws.cell(row=row, column=2, value=int(info["sacas"]))
             else:
                 ws.cell(row=row, column=2, value="")
@@ -183,7 +183,7 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
             else:
                 ws.cell(row=row, column=8, value="")
 
-    # Preenchimento correto do Caminhão (linha 18) e Condutor (linha 19) na Coluna C
+    # Preenchimento do Caminhão (linha 18) e Condutor (linha 19) na Coluna C
     ws.cell(row=18, column=3, value=caminhao_str.upper())
     ws.cell(row=19, column=3, value=condutor_str.upper())
 
@@ -245,7 +245,7 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 
     for sigla in TODAS_SIGLAS_PADRAO:
         info = dados_linhas.get(sigla, {"sacas": "", "peso": ""})
-        qnt_sacas = str(info["sacas"]) if info["sacas"] != "" else ""
+        qnt_sacas = str(info["sacas"]) if info["sacas"] not in ["", None] else ""
         peso_total = f"{info['peso']:.2f}".replace(".", ",") if isinstance(info["peso"], (int, float)) else ""
 
         c.setFont("Helvetica-Bold", 11)
@@ -326,7 +326,7 @@ lista_siglas = [s.strip() for s in siglas_input.split(",") if s.strip()]
 
 sacas_manuais = {}
 if lista_siglas:
-    st.markdown("##### Informe a quantidade de sacas por destino:")
+    st.markdown("##### Informe a quantidade de sacas por destino (deixe em branco se não houver):")
     cols = st.columns(min(len(lista_siglas), 5))
     for idx, sigla in enumerate(lista_siglas):
         with cols[idx % 5]:
@@ -343,13 +343,17 @@ st.markdown("---")
 st.subheader("3. Carregue a Planilha de Coleta")
 file_excel = st.file_uploader("Selecione o arquivo de coleta (.xlsx / .xlsm):", type=["xlsx", "xlsm"])
 
-todas_sacas = len(sacas_manuais) > 0 and all(s is not None for s in sacas_manuais.values())
+# Altera a condição: permite gerar se PELO MENOS UM destino estiver preenchido com sacas
+pelo_menos_uma_saca = any(v is not None for v in sacas_manuais.values())
 
 # 4. Geração Unificada
 st.markdown("---")
 
-if file_excel and todas_sacas:
-    if st.button("🚀 GERAR SHIPPERS E CONTROLE DE EMBARQUE", use_container_width=True):
+if file_excel:
+    if not pelo_menos_uma_saca:
+        st.info("💡 Informe a quantidade de sacas em ao menos um destino para liberar a geração dos arquivos.")
+    
+    if st.button("🚀 GERAR SHIPPERS E CONTROLE DE EMBARQUE", use_container_width=True, disabled=not pelo_menos_uma_saca):
         try:
             df_raw = pd.read_excel(file_excel, header=None, engine="openpyxl")
             
@@ -359,11 +363,17 @@ if file_excel and todas_sacas:
 
             with zipfile.ZipFile(zip_shippers_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                 for sigla in lista_siglas:
+                    qnt_sacas = sacas_manuais.get(sigla)
+
+                    # Se o usuário não preencheu a quantidade de sacas para essa sigla, pula a geração de shipper
+                    if qnt_sacas is None:
+                        dados_embarque[sigla] = {"sacas": "", "peso": ""}
+                        continue
+
                     cidade_alvo = MAPA_DESTINOS.get(sigla, sigla)
                     _, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                     if p_original and q_volumes:
-                        qnt_sacas = sacas_manuais[sigla]
                         peso_total, contexto = calcular_valores_shipper(qnt_sacas, q_volumes, p_original)
                         dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_total}
 
@@ -383,8 +393,8 @@ if file_excel and todas_sacas:
                         else:
                             erros.append(f"{sigla} (Template '{template_path}' não encontrado)")
                     else:
-                        dados_embarque[sigla] = {"sacas": sacas_manuais[sigla], "peso": ""}
-                        erros.append(f"{sigla} (Dados não encontrados na planilha)")
+                        dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": ""}
+                        erros.append(f"{sigla} (Dados não encontrados na planilha de coleta)")
 
             fuso_bsb = pytz.timezone("America/Sao_Paulo")
             data_hoje = datetime.now(fuso_bsb).strftime("%d/%m/%Y")
@@ -444,7 +454,7 @@ if file_excel and todas_sacas:
                         use_container_width=True
                     )
                 else:
-                    st.error("Nenhuma Shipper pôde ser gerada devido a erros de busca ou ausência de templates.")
+                    st.info("Nenhuma Shipper foi gerada para download (verifique os avisos acima ou se as sacas foram informadas).")
 
         except Exception as e:
             st.error(f"Ocorreu um erro geral no processamento: {e}")
