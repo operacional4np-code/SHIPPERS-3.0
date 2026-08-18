@@ -19,7 +19,7 @@ from reportlab.lib.utils import ImageReader
 
 # Configuração da Página no Streamlit
 st.set_page_config(
-    page_title="Gerador Unificado New Post - Shippers e Embarque",
+    page_title="Shippers e controle de embarque",
     page_icon="📦",
     layout="wide"
 )
