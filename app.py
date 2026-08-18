@@ -301,7 +301,7 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 # ---------------------------------------------------------
 # INTERFACE STREAMLIT
 # ---------------------------------------------------------
-st.title("📦 Sistema Unificado New Post: Shippers & Controle de Embarque")
+st.title("📦 Shippers & Controle de Embarque")
 st.markdown("Preencha os dados abaixo para gerar os **Shippers (.docx)** nos modelos e o **Controle de Embarque (PDF/Excel)**.")
 
 # 1. Informações Gerais
