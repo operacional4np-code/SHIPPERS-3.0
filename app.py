@@ -110,7 +110,9 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    g_peso_corrigido = (f_sacas * Decimal("3")) + d_peso_original
+    # AQUI ESTÁ A ALTERAÇÃO: O peso da saca mudou de "3" para "2.4"
+    g_peso_corrigido = (f_sacas * Decimal("2.4")) + d_peso_original
+    
     fracao_fib = float(q_volumes) / float(sacas_qtd)
     i_fib = Decimal(
         str(
