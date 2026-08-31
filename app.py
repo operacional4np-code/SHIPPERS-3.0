@@ -99,7 +99,10 @@ def extrair_dados_coleta(df_raw, termo_busca):
             val_q = row.iloc[idx_qntde]
             qtd_volumes = int(float(str(val_q).replace(",", ".").strip()))
             val_p = row.iloc[idx_peso]
-            peso_original = float(str(val_p).replace(",", ".").strip())
+            
+            # Correção aplicada: Arredondando o peso para 2 casas decimais para evitar imprecisão
+            peso_original = round(float(str(val_p).replace(",", ".").strip()), 2)
+            
             return termo_busca, qtd_volumes, peso_original
         except Exception:
             continue
@@ -110,7 +113,7 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    # AQUI ESTÁ A ALTERAÇÃO: O peso da saca mudou de "3" para "2.4"
+    # Multiplicador da saca ajustado para 2.4
     g_peso_corrigido = (f_sacas * Decimal("2.4")) + d_peso_original
     
     fracao_fib = float(q_volumes) / float(sacas_qtd)
