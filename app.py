@@ -109,12 +109,13 @@ def extrair_dados_coleta(df_raw, termo_busca):
     return None, None, None
 
 
-def calcular_valores_shipper(sacas_qtd, q_volumes, p_original):
+# ALTERADO: Recebe agora a variável peso_saca
+def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    # Multiplicador da saca ajustado para 2.4
-    g_peso_corrigido = (f_sacas * Decimal("2.4")) + d_peso_original
+    # Multiplicador da saca ajustado com a variável inserida pelo usuário
+    g_peso_corrigido = (f_sacas * Decimal(str(peso_saca))) + d_peso_original
     
     fracao_fib = float(q_volumes) / float(sacas_qtd)
     i_fib = Decimal(
@@ -311,13 +312,16 @@ st.markdown("Preencha os dados abaixo para gerar os **Shippers (.docx)** nos mod
 
 # 1. Informações Gerais
 st.subheader("1. Informações Gerais do Embarque")
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4) # ALTERADO: Adicionado 4ª coluna para o peso da saca
 with col1:
     cia_input = st.text_input("Companhia / Título Central:", value="LATAM")
 with col2:
     caminhao_input = st.text_input("Identificação do Caminhão:", value="1º")
 with col3:
     condutor_input = st.text_input("Nome do Condutor:", value="ANTONIO")
+with col4:
+    # ALTERADO: Novo input para o peso padrão com o valor default de 3
+    peso_saca_input = st.number_input("Peso Padrão da Saca (kg):", value=3.0, step=0.1)
 
 # 2. Seleção de Siglas e Entrada de Sacas
 st.markdown("---")
@@ -379,7 +383,8 @@ if file_excel:
                     _, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                     if p_original and q_volumes:
-                        peso_total, contexto = calcular_valores_shipper(qnt_sacas, q_volumes, p_original)
+                        # ALTERADO: Passando a variável peso_saca_input para o cálculo
+                        peso_total, contexto = calcular_valores_shipper(qnt_sacas, q_volumes, p_original, peso_saca_input)
                         dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_total}
 
                         sigla_arq = sigla.replace(" ", "_")
