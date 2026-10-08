@@ -72,7 +72,13 @@ MAPA_DESTINOS = {
 
     "POA PRIME": "PRIME-RS PORTO ALEGRE",
 
-    "FLN PRIME": "PRIME-SC FLORIANÓPOLIS"
+    "FLN PRIME": "PRIME-SC FLORIANÓPOLIS",
+
+    "BEL": "BELÉM",
+
+    "BEL PRIME", "PRIME-PA BELÉM",
+
+    "STM PRIME", "PRIME-PA SANTAREM"
 
 }
 
@@ -80,7 +86,7 @@ MAPA_DESTINOS = {
 
 TODAS_SIGLAS_PADRAO = [
 
-    "CGR", "CGB", "CWB", "FLN", "GYN", "MAO", "POA", "PVH", "POA PRIME", "FLN PRIME"
+    "CGR", "CGB", "CWB", "FLN", "GYN", "MAO", "POA", "PVH", "POA PRIME", "FLN PRIME", "BEL", "BEL PRIME, "STM PRIME"
 
 ]
 
@@ -181,6 +187,8 @@ def extrair_dados_coleta(df_raw, termo_busca):
                 .replace(" RS", "")
 
                 .replace(" RO", "")
+                
+                .replace(" PA", "")
 
                 .strip()
 
@@ -658,7 +666,7 @@ siglas_input = st.text_input(
 
     "Digite as Siglas do embarque (separadas por vírgula):",
 
-    value="CGR, CGB, CWB, FLN, GYN, MAO, POA, PVH, POA PRIME, FLN PRIME",
+    value="CGR, CGB, CWB, FLN, GYN, MAO, POA, PVH, POA PRIME, FLN PRIME, BEL, BEL PRIME, STM PRIME",
 
 ).upper().strip()
 
