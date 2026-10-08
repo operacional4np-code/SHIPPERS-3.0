@@ -76,9 +76,9 @@ MAPA_DESTINOS = {
 
     "BEL": "BELÉM",
 
-    "BEL PRIME":, "PRIME-PA BELÉM",
+    "BEL PRIME": "PRIME-PA BELÉM",
 
-    "STM PRIME", "PRIME-PA SANTAREM"
+    "STM PRIME": "PRIME-PA SANTAREM"
 
 }
 
