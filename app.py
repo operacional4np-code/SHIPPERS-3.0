@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1. FUNÇÕES DE CÁLCULO E FORMATAÇÃO (AJUSTADO PARA O SHIPPER MANUAL)
+# 1. FUNÇÕES DE CÁLCULO E FORMATAÇÃO (SHIPPER MANUAL)
 # ==============================================================================
 
 def formatar_peso(valor: float) -> str:
@@ -26,13 +26,11 @@ def calcular_overpack(num_boxes: int, weight_per_box: float, overpack_num: int =
     Realiza a multiplicação direta (Caixas x Peso Unitário) conforme a regra manual.
     Exemplo: 7 caixas x 1,71 Kg = 11,97 Kg G
     """
-    # Cálculo exato ajustado
     total_weight = round(num_boxes * weight_per_box, 2)
     
     str_weight_per_box = formatar_peso(weight_per_box)
     str_total_weight = formatar_peso(total_weight)
     
-    # Estrutura do texto idêntica ao espelho da Shipper
     texto_declaracao = (
         f"{num_boxes} FIBREBOARD BOXES X {str_weight_per_box} Kg G\n\n"
         f"OVERPACK USED x {overpack_num}\n\n"
@@ -50,11 +48,11 @@ def calcular_overpack(num_boxes: int, weight_per_box: float, overpack_num: int =
     }
 
 # ==============================================================================
-# 2. GERADOR DE PDF COMPLETO (REPORTLAB)
+# 2. GERADOR DE PDF (REPORTLAB)
 # ==============================================================================
 
 def gerar_pdf_overpack(dados_overpack: list) -> bytes:
-    """Gera um PDF formatado contendo as caixas/etiquetas de Overpack."""
+    """Gera um PDF formatado contendo as declarações de Overpack."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -72,7 +70,7 @@ def gerar_pdf_overpack(dados_overpack: list) -> bytes:
         parent=styles['Heading1'],
         fontSize=16,
         leading=20,
-        alignment=1, # Centralizado
+        alignment=1,
         spaceAfter=20
     )
     style_body = ParagraphStyle(
@@ -80,7 +78,7 @@ def gerar_pdf_overpack(dados_overpack: list) -> bytes:
         parent=styles['Normal'],
         fontSize=11,
         leading=16,
-        alignment=0 # Esquerda
+        alignment=0
     )
     
     elements.append(Paragraph("<b>DECLARAÇÃO DE OVERPACK / SHIPPER</b>", style_title))
@@ -90,7 +88,6 @@ def gerar_pdf_overpack(dados_overpack: list) -> bytes:
         texto_formatado = item['texto_declaracao'].replace('\n', '<br/>')
         p = Paragraph(texto_formatado, style_body)
         
-        # Moldura retangular estilo etiqueta
         t = Table([[p]], colWidths=[500])
         t.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 1, colors.black),
@@ -114,7 +111,7 @@ st.markdown("Cálculo parametrizado por multiplicação direta: **Total = Caixas
 aba1, aba2 = st.tabs(["📝 Entrada Manual", "📁 Processar Planilha (Excel/CSV)"])
 
 # ------------------------------------------------------------------------------
-# ABA 1: GERAR INDIVIDUALMENTE
+# ABA 1: ENTRADA MANUAL
 # ------------------------------------------------------------------------------
 with aba1:
     st.subheader("Parâmetros do Overpack")
@@ -147,6 +144,46 @@ with aba1:
         )
     with col_d2:
         pdf_bytes = gerar_pdf_overpack([res])
-        st.download_button()
-        label="🔴 Baixar Documento PDF",
-        data=
+        st.download_button(
+            label="🔴 Baixar Documento PDF",
+            data=pdf_bytes,
+            file_name=f"declaracao_overpack_{overpack_num}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
+# ------------------------------------------------------------------------------
+# ABA 2: PROCESSAMENTO EM LOTE
+# ------------------------------------------------------------------------------
+with aba2:
+    st.subheader("Carregar Planilha com Múltiplos Overpacks")
+    uploaded_file = st.file_uploader("Envie seu arquivo Excel (.xlsx) ou CSV", type=["xlsx", "xls", "csv"])
+    
+    if uploaded_file is not None:
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            
+            st.write("Visualização da Planilha:")
+            st.dataframe(df.head(), use_container_width=True)
+            
+            cols = list(df.columns)
+            col_box = st.selectbox("Coluna de Quantidade de Caixas:", cols, index=0)
+            col_weight = st.selectbox("Coluna de Peso Unitário (Kg):", cols, index=min(1, len(cols)-1))
+            
+            if st.button("🚀 Processar Planilha", type="primary"):
+                lista_resultados = []
+                
+                for idx, row in df.iterrows():
+                    qtd = int(row[col_box])
+                    peso_u = float(row[col_weight])
+                    resultado_item = calcular_overpack(num_boxes=qtd, weight_per_box=peso_u, overpack_num=idx+1)
+                    lista_resultados.append(resultado_item)
+                
+                df['Peso Total Calculado (Kg)'] = [r['total_weight'] for r in lista_resultados]
+                df['Texto Overpack'] = [r['texto_declaracao'] for r in lista_resultados]
+                
+                st.success("Planilha processada com sucesso!")
+                st.dataframe(df[['Peso Total Calculado (Kg)', 'Texto Overpack']], use
