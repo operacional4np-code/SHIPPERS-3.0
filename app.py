@@ -4,7 +4,7 @@ import os
 import unicodedata
 import zipfile
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 import pandas as pd
 import pytz
 import openpyxl
@@ -127,30 +127,16 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
+    # Peso total corrigido incluindo a saca padrão configurada (ex: 3.00 kg)
     g_peso_corrigido = (f_sacas * Decimal(str(peso_saca))) + d_peso_original
     
-    fracao_fib = float(q_volumes) / float(sacas_qtd)
-    i_fib = Decimal(
-        str(
-            max(
-                1,
-                math.floor(fracao_fib)
-                + (1 if (fracao_fib - math.floor(fracao_fib)) >= 0.5 else 0),
-            )
-        )
-    )
+    # Número de fibreboards é igual à quantidade de volumes obtida da planilha
+    i_fib = Decimal(str(q_volumes))
 
-    base_j = float(g_peso_corrigido / f_sacas / i_fib)
-    j_inicio = Decimal(f"{max(0.01, math.floor(base_j * 100) / 100 - 0.50):.2f}")
-    perfeito_j = j_inicio
+    # Cálculo do peso por fibreboard arredondado para cima com 2 casas decimais (ex: 1.71 kg)
+    peso_por_fib = (g_peso_corrigido / (i_fib * f_sacas)).quantize(Decimal('0.01'), rounding=ROUND_UP)
 
-    for a in range(1500):
-        j_teste = j_inicio + (Decimal(str(a)) * Decimal("0.01"))
-        if (j_teste * i_fib * f_sacas) - g_peso_corrigido >= 0:
-            perfeito_j = j_teste
-            break
-
-    total_overpack = perfeito_j * i_fib
+    total_overpack = peso_por_fib * i_fib
     peso_total_destino = float(total_overpack * f_sacas)
 
     fuso_bsb = pytz.timezone("America/Sao_Paulo")
@@ -158,7 +144,7 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
 
     contexto = {
         "FIBREBOARD": str(int(i_fib)),
-        "PESO_G": "{:.2f}".format(perfeito_j).replace(".", ","),
+        "PESO_G": "{:.2f}".format(peso_por_fib).replace(".", ","),
         "TOTAL_OVERPACK": "{:.2f}".format(total_overpack).replace(".", ","),
         "MARCACAO": " ".join([f"#{i+1}" for i in range(int(sacas_qtd))]),
         "DATA": data_formatada,
