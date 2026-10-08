@@ -127,13 +127,9 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    # Peso total corrigido incluindo a saca padrão configurada (ex: 3.00 kg)
     g_peso_corrigido = (f_sacas * Decimal(str(peso_saca))) + d_peso_original
-    
-    # Número de fibreboards é igual à quantidade de volumes obtida da planilha
     i_fib = Decimal(str(q_volumes))
 
-    # Cálculo do peso por fibreboard arredondado para cima com 2 casas decimais (ex: 1.71 kg)
     peso_por_fib = (g_peso_corrigido / (i_fib * f_sacas)).quantize(Decimal('0.01'), rounding=ROUND_UP)
 
     total_overpack = peso_por_fib * i_fib
