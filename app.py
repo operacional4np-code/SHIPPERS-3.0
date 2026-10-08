@@ -86,7 +86,7 @@ MAPA_DESTINOS = {
 
 TODAS_SIGLAS_PADRAO = [
 
-    "CGR", "CGB", "CWB", "FLN", "GYN", "MAO", "POA", "PVH", "POA PRIME", "FLN PRIME", "BEL", "BEL PRIME, "STM PRIME"
+    "CGR", "CGB", "CWB", "FLN", "GYN", "MAO", "POA", "PVH", "POA PRIME", "FLN PRIME", "BEL", "BEL PRIME", "STM PRIME"
 
 ]
 
