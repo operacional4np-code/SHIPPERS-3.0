@@ -147,6 +147,6 @@ with aba1:
         )
     with col_d2:
         pdf_bytes = gerar_pdf_overpack([res])
-        st.download_button(
+        st.download_button()
             label="🔴 Baixar Documento PDF",
             data=
