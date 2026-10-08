@@ -1,6 +1,7 @@
 import io
 import math
 import os
+import unicodedata
 import zipfile
 from datetime import date, datetime
 from decimal import Decimal
@@ -24,6 +25,16 @@ st.set_page_config(
     layout="wide"
 )
 
+# ---------------------------------------------------------
+# FUNÇÃO AUXILIAR DE NORMALIZAÇÃO DE TEXTO (IGNORA ACENTOS)
+# ---------------------------------------------------------
+def normalizar_texto(texto):
+    if pd.isnull(texto):
+        return ""
+    nfkd = unicodedata.normalize('NFD', str(texto))
+    return "".join([c for c in nfkd if unicodedata.category(c) != 'Mn']).upper().strip()
+
+
 # MAPA DE TRADUÇÃO DAS CIDADES / DESTINOS
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE",
@@ -36,9 +47,8 @@ MAPA_DESTINOS = {
     "PVH": "PORTO VELHO",
     "POA PRIME": "PRIME-RS PORTO ALEGRE",
     "FLN PRIME": "PRIME-SC FLORIANÓPOLIS",
-    # --- NOVOS DESTINOS CORRIGIDOS ---
     "BEL": "BELEM",
-    "BEL PRIME": "PRIME-PA BELEM",
+    "BEL PRIME": "PRIME-PA BELÉM",
     "STM PRIME": "PRIME-PA SANTAREM"
 }
 
@@ -54,11 +64,13 @@ def extrair_dados_coleta(df_raw, termo_busca):
     linha_cabecalho = None
     idx_destino, idx_qntde, idx_peso = None, None, None
 
+    termo_busca_norm = normalizar_texto(termo_busca)
+
     for idx, row in df_raw.iterrows():
-        valores = [str(v).strip().upper() for v in row.values if pd.notnull(v)]
+        valores = [normalizar_texto(v) for v in row.values if pd.notnull(v)]
         if "DESTINO" in valores and ("QNTDE" in valores or "QNTD" in valores) and "PESO" in valores:
             linha_cabecalho = idx
-            valores_linha_lista = [str(v).strip().upper() for v in row.values]
+            valores_linha_lista = [normalizar_texto(v) for v in row.values]
             idx_destino = valores_linha_lista.index("DESTINO")
             idx_qntde = (
                 valores_linha_lista.index("QNTDE")
@@ -73,20 +85,17 @@ def extrair_dados_coleta(df_raw, termo_busca):
 
     for idx in range(linha_cabecalho + 1, len(df_raw)):
         row = df_raw.iloc[idx]
-        val_destino = (
-            str(row.iloc[idx_destino]).strip().upper()
-            if pd.notnull(row.iloc[idx_destino])
-            else ""
-        )
+        val_destino_raw = row.iloc[idx_destino]
+        val_destino_norm = normalizar_texto(val_destino_raw)
 
-        if "PRIME" in termo_busca:
-            if termo_busca not in val_destino:
+        if "PRIME" in termo_busca_norm:
+            if termo_busca_norm not in val_destino_norm:
                 continue
         else:
-            if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
+            if "PRIME" in val_destino_norm or "TOTAL" in val_destino_norm or val_destino_norm == "" or val_destino_norm.isdigit():
                 continue
             destino_limpo = (
-                val_destino.replace("AGF", "")
+                val_destino_norm.replace("AGF", "")
                 .replace(" MT", "")
                 .replace(" MS", "")
                 .replace(" PR", "")
@@ -98,7 +107,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
                 .replace(" PA", "")
                 .strip()
             )
-            if termo_busca not in destino_limpo and destino_limpo not in termo_busca:
+            if termo_busca_norm not in destino_limpo and destino_limpo not in termo_busca_norm:
                 continue
 
         try:
@@ -106,7 +115,6 @@ def extrair_dados_coleta(df_raw, termo_busca):
             qtd_volumes = int(float(str(val_q).replace(",", ".").strip()))
             val_p = row.iloc[idx_peso]
             
-            # Arredondando o peso para 2 casas decimais para evitar imprecisão
             peso_original = round(float(str(val_p).replace(",", ".").strip()), 2)
             
             return termo_busca, qtd_volumes, peso_original
@@ -119,7 +127,6 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    # Multiplicador da saca ajustado com a variável inserida pelo usuário
     g_peso_corrigido = (f_sacas * Decimal(str(peso_saca))) + d_peso_original
     
     fracao_fib = float(q_volumes) / float(sacas_qtd)
@@ -146,7 +153,6 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     total_overpack = perfeito_j * i_fib
     peso_total_destino = float(total_overpack * f_sacas)
 
-    # Captura da data atual com Fuso Horário de Brasília
     fuso_bsb = pytz.timezone("America/Sao_Paulo")
     data_formatada = datetime.now(fuso_bsb).strftime("%d/%m/%Y")
 
@@ -174,11 +180,9 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
 
-    # Data no cabeçalho
     ws.cell(row=2, column=9, value=data_str)
     ws.cell(row=5, column=5, value=cia.upper())
 
-    # Preenchimento das linhas das siglas
     linhas_processadas = set()
     for row in range(7, 20):
         val_sigla = str(ws.cell(row=row, column=1).value or "").strip().upper()
@@ -283,13 +287,11 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 
         y_curr -= row_height
 
-    # Rodapé: Caminhão e Condutor
     y_footer = y_curr - 15
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x_sigla + 30, y_footer, f"CAMINHÃO:  {caminhao_str.upper()}")
     c.drawString(x_sigla + 30, y_footer - 18, f"CONDUTOR:  {condutor_str.upper()}")
 
-    # Seção: OBSERVAÇÕES
     y_obs = y_footer - 45
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x_sigla - 30, y_obs, "OBSERVAÇÕES:")
@@ -388,9 +390,15 @@ if file_excel:
                         dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_total}
 
                         sigla_arq = sigla.replace(" ", "_")
-                        template_path = f"templates/{sigla_arq}-SHIPPER-t.docx"
+                        possiveis_caminhos = [
+                            f"templates/{sigla}-SHIPPER-t.docx",
+                            f"templates/{sigla_arq}-SHIPPER-t.docx",
+                            f"templates/{sigla}-SHIPPER-t.DOCX",
+                            f"templates/{sigla_arq}-SHIPPER-t.DOCX",
+                        ]
+                        template_path = next((p for p in possiveis_caminhos if os.path.exists(p)), None)
 
-                        if os.path.exists(template_path):
+                        if template_path:
                             try:
                                 doc = DocxTemplate(template_path)
                                 doc.render(contexto)
@@ -401,7 +409,7 @@ if file_excel:
                             except Exception as e_tpl:
                                 erros.append(f"{sigla} (Erro ao renderizar template: {e_tpl})")
                         else:
-                            erros.append(f"{sigla} (Template '{template_path}' não encontrado)")
+                            erros.append(f"{sigla} (Template em 'templates/' não encontrado para a sigla '{sigla}')")
                     else:
                         dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": ""}
                         erros.append(f"{sigla} (Dados não encontrados na planilha de coleta)")
