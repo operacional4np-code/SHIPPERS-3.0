@@ -186,4 +186,31 @@ with aba2:
                 df['Texto Overpack'] = [r['texto_declaracao'] for r in lista_resultados]
                 
                 st.success("Planilha processada com sucesso!")
-                st.dataframe(df[['Peso Total Calculado (Kg)', 'Texto Overpack']], use
+                st.dataframe(df[['Peso Total Calculado (Kg)', 'Texto Overpack']], use_container_width=True)
+                
+                # Geração segura do buffer para Excel
+                buffer_excel = io.BytesIO()
+                with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name="Overpacks")
+                excel_bytes = buffer_excel.getvalue()
+                
+                c_b1, c_b2 = st.columns(2)
+                with c_b1:
+                    st.download_button(
+                        label="📊 Baixar Excel Atualizado",
+                        data=excel_bytes,
+                        file_name="overpacks_calculados.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                with c_b2:
+                    pdf_lote = gerar_pdf_overpack(lista_resultados)
+                    st.download_button(
+                        label="🔴 Baixar PDF Unificado",
+                        data=pdf_lote,
+                        file_name="relatorio_overpacks.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+        except Exception as e:
+            st.error(f"Erro ao processar o arquivo: {e}")
