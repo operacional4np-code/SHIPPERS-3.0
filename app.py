@@ -2,6 +2,7 @@ import io
 import math
 import os
 import zipfile
+import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 import pandas as pd
@@ -46,7 +47,7 @@ TODAS_SIGLAS_PADRAO = [
 ]
 
 # ---------------------------------------------------------
-# FUNÇÕES DE EXTRAÇÃO E CÁLCULO
+# FUNÇÕES DE EXTRAÇÃO E CÁLCULO (AJUSTADA PARA DIFERENCIAR BEL E BEL PRIME)
 # ---------------------------------------------------------
 def extrair_dados_coleta(df_raw, termo_busca):
     linha_cabecalho = None
@@ -69,25 +70,29 @@ def extrair_dados_coleta(df_raw, termo_busca):
     if linha_cabecalho is None:
         return None, None, None
 
+    # Normaliza o termo de busca para ignorar acentos
+    termo_norm = ''.join(c for c in unicodedata.normalize('NFD', termo_busca) if unicodedata.category(c) != 'Mn').upper()
+
     for idx in range(linha_cabecalho + 1, len(df_raw)):
         row = df_raw.iloc[idx]
-        val_destino = (
-            str(row.iloc[idx_destino]).strip().upper()
+        val_destino_raw = (
+            str(row.iloc[idx_destino]).strip()
             if pd.notnull(row.iloc[idx_destino])
             else ""
         )
+        val_destino_norm = ''.join(c for c in unicodedata.normalize('NFD', val_destino_raw) if unicodedata.category(c) != 'Mn').upper()
 
-        if "PRIME" in termo_busca:
-            if termo_busca not in val_destino:
+        if "PRIME" in termo_norm:
+            if termo_norm not in val_destino_norm:
                 continue
         else:
-            # AJUSTE APLICADO: Ignora linhas PRIME quando a busca for para o destino padrão (evita conflito com BEL PRIME)
-            if "PRIME" in val_destino:
+            # Ignora linhas PRIME quando a busca for para o destino padrão (evita conflito entre BEL e BEL PRIME)
+            if "PRIME" in val_destino_norm:
                 continue
-            if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
+            if "TOTAL" in val_destino_norm or val_destino_norm == "" or val_destino_norm.isdigit():
                 continue
             destino_limpo = (
-                val_destino.replace("AGF", "")
+                val_destino_norm.replace("AGF", "")
                 .replace(" MT", "")
                 .replace(" MS", "")
                 .replace(" PR", "")
@@ -99,7 +104,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
                 .replace(" PA", "")
                 .strip()
             )
-            if termo_busca not in destino_limpo and destino_limpo not in termo_busca:
+            if termo_norm not in destino_limpo and destino_limpo not in termo_norm:
                 continue
 
         try:
