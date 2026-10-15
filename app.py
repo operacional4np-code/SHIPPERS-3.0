@@ -24,7 +24,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# MAPA DE TRADUÇÃO DAS CIDADES / DESTINOS (AJUSTADO 'BEL' PARA 'BELEM')
+# MAPA DE TRADUÇÃO DAS CIDADES / DESTINOS
 MAPA_DESTINOS = {
     "CGR": "CAMPO GRANDE",
     "CGB": "CUIABA",
@@ -81,6 +81,9 @@ def extrair_dados_coleta(df_raw, termo_busca):
             if termo_busca not in val_destino:
                 continue
         else:
+            # AJUSTE APLICADO: Ignora linhas PRIME quando a busca for para o destino padrão (evita conflito com BEL PRIME)
+            if "PRIME" in val_destino:
+                continue
             if "TOTAL" in val_destino or val_destino == "" or val_destino.isdigit():
                 continue
             destino_limpo = (
@@ -104,7 +107,7 @@ def extrair_dados_coleta(df_raw, termo_busca):
             qtd_volumes = int(float(str(val_q).replace(",", ".").strip()))
             val_p = row.iloc[idx_peso]
             
-            # Correção aplicada: Arredondando o peso para 2 casas decimais para evitar imprecisão
+            # Arredondando o peso para 2 casas decimais para evitar imprecisão
             peso_original = round(float(str(val_p).replace(",", ".").strip()), 2)
             
             return termo_busca, qtd_volumes, peso_original
@@ -113,12 +116,10 @@ def extrair_dados_coleta(df_raw, termo_busca):
     return None, None, None
 
 
-# ALTERADO: Recebe agora a variável peso_saca
 def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     f_sacas = Decimal(str(sacas_qtd))
     d_peso_original = Decimal(str(p_original))
 
-    # Multiplicador da saca ajustado com a variável inserida pelo usuário
     g_peso_corrigido = (f_sacas * Decimal(str(peso_saca))) + d_peso_original
     
     fracao_fib = float(q_volumes) / float(sacas_qtd)
@@ -145,7 +146,6 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
     total_overpack = perfeito_j * i_fib
     peso_total_destino = float(total_overpack * f_sacas)
 
-    # Captura da data atual com Fuso Horário de Brasília
     fuso_bsb = pytz.timezone("America/Sao_Paulo")
     data_formatada = datetime.now(fuso_bsb).strftime("%d/%m/%Y")
 
@@ -173,11 +173,9 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
 
-    # Data no cabeçalho
     ws.cell(row=2, column=9, value=data_str)
     ws.cell(row=5, column=5, value=cia.upper())
 
-    # Preenchimento das linhas das siglas
     linhas_processadas = set()
     for row in range(7, 17):
         val_sigla = str(ws.cell(row=row, column=1).value or "").strip().upper()
@@ -193,7 +191,6 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
             else:
                 ws.cell(row=row, column=8, value="")
 
-    # Preenchimento do Caminhão (linha 18) e Condutor (linha 19) na Coluna C
     ws.cell(row=18, column=3, value=caminhao_str.upper())
     ws.cell(row=19, column=3, value=condutor_str.upper())
 
@@ -283,13 +280,11 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 
         y_curr -= row_height
 
-    # Rodapé: Caminhão e Condutor
     y_footer = y_curr - 15
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x_sigla + 30, y_footer, f"CAMINHÃO:  {caminhao_str.upper()}")
     c.drawString(x_sigla + 30, y_footer - 18, f"CONDUTOR:  {condutor_str.upper()}")
 
-    # Seção: OBSERVAÇÕES
     y_obs = y_footer - 45
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x_sigla - 30, y_obs, "OBSERVAÇÕES:")
@@ -314,9 +309,8 @@ def gerar_pdf_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condu
 st.title("🚚 Shippers & Controle de Embarque")
 st.markdown("Preencha os dados abaixo para gerar os **Shippers (.docx)** nos modelos e o **Controle de Embarque (PDF/Excel)**.")
 
-# 1. Informações Gerais
 st.subheader("1. Informações Gerais do Embarque")
-col1, col2, col3, col4 = st.columns(4) # ALTERADO: Adicionado 4ª coluna para o peso da saca
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     cia_input = st.text_input("Companhia / Título Central:", value="LATAM")
 with col2:
@@ -324,10 +318,8 @@ with col2:
 with col3:
     condutor_input = st.text_input("Nome do Condutor:", value="ANTONIO")
 with col4:
-    # ALTERADO: Novo input para o peso padrão com o valor default de 3
     peso_saca_input = st.number_input("Peso Padrão da Saca (kg):", value=3.0, step=0.1)
 
-# 2. Seleção de Siglas e Entrada de Sacas
 st.markdown("---")
 st.subheader("2. Destinos e Quantidade de Sacas")
 siglas_input = st.text_input(
@@ -351,15 +343,12 @@ if lista_siglas:
                 key=f"s_{sigla}",
             )
 
-# 3. Upload da Planilha
 st.markdown("---")
 st.subheader("3. Carregue a Planilha de Coleta")
 file_excel = st.file_uploader("Selecione o arquivo de coleta (.xlsx / .xlsm):", type=["xlsx", "xlsm"])
 
-# Altera a condição: permite gerar se PELO MENOS UM destino estiver preenchido com sacas
 pelo_menos_uma_saca = any(v is not None for v in sacas_manuais.values())
 
-# 4. Geração Unificada
 st.markdown("---")
 
 if file_excel:
@@ -378,7 +367,6 @@ if file_excel:
                 for sigla in lista_siglas:
                     qnt_sacas = sacas_manuais.get(sigla)
 
-                    # Se o usuário não preencheu a quantidade de sacas para essa sigla, pula a geração de shipper
                     if qnt_sacas is None:
                         dados_embarque[sigla] = {"sacas": "", "peso": ""}
                         continue
@@ -387,7 +375,6 @@ if file_excel:
                     _, q_volumes, p_original = extrair_dados_coleta(df_raw, cidade_alvo)
 
                     if p_original and q_volumes:
-                        # ALTERADO: Passando a variável peso_saca_input para o cálculo
                         peso_total, contexto = calcular_valores_shipper(qnt_sacas, q_volumes, p_original, peso_saca_input)
                         dados_embarque[sigla] = {"sacas": qnt_sacas, "peso": peso_total}
 
