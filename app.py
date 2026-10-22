@@ -25,7 +25,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# MAPA DE TRADUÇÃO DAS CIDADES / DESTINOS (Atualizado sem CGB, CGR, POA, POA PRIME, FLN, FLN PRIME, CWB)
+# MAPA DE TRADUÇÃO DAS CIDADES / DESTINOS (Sem CGB, CGR, POA, POA PRIME, FLN, FLN PRIME, CWB)
 MAPA_DESTINOS = {
     "GYN": "GOIANIA",
     "MAO": "MANAUS",
@@ -160,7 +160,7 @@ def calcular_valores_shipper(sacas_qtd, q_volumes, p_original, peso_saca):
 
 
 # ---------------------------------------------------------
-# GERADORES DE CONTROLE DE EMBARQUE (EXCEL E PDF ATUALIZADOS)
+# GERADORES DE CONTROLE DE EMBARQUE (EXCEL E PDF)
 # ---------------------------------------------------------
 def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, condutor_str, template_path="Controle Embarque-t.xlsx"):
     if not os.path.exists(template_path):
@@ -174,7 +174,6 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
     ws.cell(row=2, column=9, value=data_str)
     ws.cell(row=5, column=5, value=cia.upper())
 
-    # Mapeamento ajustado para a nova planilha base (linhas 7 a 12 para as siglas)
     linhas_processadas = set()
     for row in range(7, 13):
         val_sigla = str(ws.cell(row=row, column=1).value or "").strip().upper()
@@ -186,9 +185,10 @@ def gerar_excel_controle_embarque(cia, data_str, dados_linhas, caminhao_str, con
             else:
                 ws.cell(row=row, column=3, value="")
             if isinstance(info["peso"], (int, float)):
-                ws.cell(row=row, column=9, value=round(info["peso"], 2))
+                # Ajustado para coluna 8 (H) para preencher dentro do quadrado corretamente
+                ws.cell(row=row, column=8, value=round(info["peso"], 2))
             else:
-                ws.cell(row=row, column=9, value="")
+                ws.cell(row=row, column=8, value="")
 
     ws.cell(row=14, column=3, value=caminhao_str.upper())
     ws.cell(row=15, column=3, value=condutor_str.upper())
